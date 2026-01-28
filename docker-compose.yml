@@ -3,10 +3,12 @@ services:
   db:
     image: postgres:15-alpine
     container_name: ads-db
+    env_file:
+      - ./.env
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: ads_db
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -29,8 +31,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    env_file:
+      - ./.env
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/ads_db
+      # Use the internal docker network host "db"
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       ASSETS_DIR: /app/assets
     volumes:
       - ./assets:/app/assets
@@ -46,9 +51,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    env_file:
+      - ./.env
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/ads_db
-      PORT: 3001
+      # Use the internal docker network host "db"
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      PORT: ${PORT}
       ASSETS_DIR: /app/assets
     volumes:
       - ./assets:/app/assets

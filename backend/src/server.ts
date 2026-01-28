@@ -1,16 +1,19 @@
+import path from 'path';
+import { config as loadEnv } from 'dotenv';
+
+// Load .env from project root first, then cwd (backend/.env overrides)
+loadEnv({ path: path.resolve(__dirname, '..', '..', '.env') });
+loadEnv();
 
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import fs from 'fs';
-import path from 'path';
 
-import 'reflect-metadata';
 import { config } from './config';
 import { adsRoutes, statsRoutes } from './routes';
 import { errorHandler, notFoundHandler } from './middleware';
-import { initializeDatabase } from './database/data-source';
 
 const app = express();
 
@@ -47,7 +50,12 @@ app.use(errorHandler);
 
 const startServer = async () => {
     try {
-        await initializeDatabase();
+        // Initialize TypeORM DataSource
+        const { AppDataSource } = await import('./database/data-source');
+        if (!AppDataSource.isInitialized) {
+            await AppDataSource.initialize();
+            console.log('Database connection established');
+        }
 
         const assetsDir = config.assets.directory;
         

@@ -27,7 +27,7 @@ class ScraperConfig:
         return cls(
             target_url=os.getenv(
                 'TARGET_URL',
-                'https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=US&is_targeted_country=false&media_type=all&search_type=page&view_all_page_id=15087023444'
+                'https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=US&is_targeted_country=false&media_type=all&search_type=page&sort_data[mode]=total_impressions&sort_data[direction]=desc&view_all_page_id=15087023444'
             ),
             max_ads=int(os.getenv('MAX_ADS', '50')),
             scroll_delay_ms=int(os.getenv('SCROLL_DELAY_MS', '2000')),

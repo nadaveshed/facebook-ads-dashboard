@@ -1,5 +1,5 @@
 import { AppDataSource } from '../database/data-source';
-import { Ad as AdEntity, AdStatus } from '../entities/Ad.entity';
+import { Ad as AdEntity, AdStatus } from '../entities';
 import { Ad, AdFilters, AdStats, PaginatedResponse } from '../models';
 import { DatabaseError } from '../errors/AppError';
 import { Repository } from 'typeorm';
@@ -26,11 +26,13 @@ function toModel(entity: AdEntity): Ad {
     return {
         id: entity.id,
         ad_id: entity.ad_id,
+        lib_id: entity.lib_id,
         status: entity.status as 'active' | 'inactive',
         platforms: entity.platforms,
         start_date: dateToString(entity.start_date),
         end_date: dateToString(entity.end_date),
         asset_type: entity.asset_type as 'image' | 'video' | 'none',
+        asset_url: entity.asset_url,
         asset_path: entity.asset_path,
         ad_content: entity.ad_content,
         advertiser_name: entity.advertiser_name,

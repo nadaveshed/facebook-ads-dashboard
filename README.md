@@ -20,10 +20,17 @@ This project consists of four Dockerized services:
 
 ### Run the Application
 
-```bash
-cd facebook-ads-dashboard
-docker-compose up --build
-```
+1. **Copy env and set sensitive values** (passwords, URLs):
+   ```bash
+   cp .env.example .env
+   # Edit .env and set at least POSTGRES_PASSWORD (and DATABASE_URL if not using Docker defaults)
+   ```
+
+2. **Start with Docker**:
+   ```bash
+   cd facebook-ads-dashboard
+   docker-compose up --build
+   ```
 
 Wait for all services to start (scraper will populate demo data), then open:
 
@@ -180,18 +187,23 @@ docker-compose up db -d
 
 ## Environment Variables
 
-### Scraper
-- `DATABASE_URL` - PostgreSQL connection string
-- `ASSETS_DIR` - Directory for downloaded assets
-- `MAX_ADS` - Maximum number of ads to scrape (default: 50)
-- `TARGET_URL` - Facebook Ads Library URL to scrape
-- `HEADLESS` - Run browser in headless mode (default: true)
-- `SCROLL_DELAY_MS` - Delay between scrolls in milliseconds (default: 2000)
+Sensitive and config values live in **`.env`** (not committed). Copy `.env.example` to `.env` and set your values.
 
-### Backend
-- `DATABASE_URL` - PostgreSQL connection string
-- `PORT` - Server port (default: 3001)
-- `ASSETS_DIR` - Directory for serving assets
+| Variable | Used by | Description |
+|----------|---------|-------------|
+| `POSTGRES_USER` | docker-compose, db | Database user |
+| `POSTGRES_PASSWORD` | docker-compose, db | Database password (set a strong one in production) |
+| `POSTGRES_DB` | docker-compose, db | Database name |
+| `DATABASE_URL` | backend, scraper, drizzle | Full connection string (e.g. `postgresql://user:pass@host:5432/db`) |
+| `PORT` | backend | API port (default 3001) |
+| `ASSETS_DIR` | backend, scraper | Path to ad assets |
+| `FRONTEND_URL` | backend | Allowed CORS origin |
+| `TARGET_URL` | scraper | Facebook Ads Library URL to scrape |
+| `MAX_ADS` | scraper | Max ads to scrape |
+| `SCROLL_DELAY_MS` | scraper | Scroll delay (ms) |
+| `HEADLESS` | scraper | Run browser headless (true/false) |
+
+Optional for Docker: `DB_PORT`, `BACKEND_PORT`, `FRONTEND_PORT` to override published ports.
 
 ## License
 

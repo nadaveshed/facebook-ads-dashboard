@@ -1,11 +1,13 @@
 export interface Ad {
     id: number;
     ad_id: string;
+    lib_id: string;
     status: 'active' | 'inactive';
     platforms: string[];
     start_date: string | null;
     end_date: string | null;
     asset_type: 'image' | 'video' | 'none';
+    asset_url: string | null;
     asset_path: string | null;
     ad_content: string | null;
     advertiser_name: string;
