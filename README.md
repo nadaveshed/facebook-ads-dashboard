@@ -178,35 +178,6 @@ docker-compose up db -d
 | Frontend | React 18, TypeScript, Vite, Recharts |
 | Deployment | Docker, nginx |
 
-## Deploy to GitHub Pages
-
-Only the **frontend** is deployed to GitHub Pages (static hosting). The backend and database must run elsewhere (e.g. Railway, Render) if you want live data.
-
-### Steps
-
-1. **Push the repo to GitHub** (if you haven’t already):
-   ```bash
-   git remote add origin https://github.com/nadaveshed/facebook-ads-dashboard.git
-   git push -u origin main
-   ```
-
-2. **Turn on GitHub Pages**  
-   Repo → **Settings** → **Pages** → **Build and deployment** → Source: **GitHub Actions**.
-
-3. **Deploy**  
-   Push to `main` (or `master`). The workflow in `.github/workflows/deploy-pages.yml` will build the frontend and deploy.  
-   Your site will be at: `https://nadaveshed.github.io/facebook-ads-dashboard/`
-
-4. **Optional – use a deployed backend**  
-   If the backend is deployed (e.g. `https://your-api.onrender.com`):  
-   Repo → **Settings** → **Secrets and variables** → **Actions** → **Variables** → New variable:  
-   - Name: `REACT_APP_API_URL`  
-   - Value: `https://your-api.onrender.com`  
-
-   Re-run the “Deploy to GitHub Pages” workflow so the new build uses this API URL.
-
----
-
 ## Environment Variables
 
 ### Scraper

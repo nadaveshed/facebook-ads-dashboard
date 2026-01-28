@@ -6,10 +6,11 @@ import morgan from 'morgan';
 import fs from 'fs';
 import path from 'path';
 
+import 'reflect-metadata';
 import { config } from './config';
 import { adsRoutes, statsRoutes } from './routes';
 import { errorHandler, notFoundHandler } from './middleware';
-import { initializeDatabase } from './database/db';
+import { initializeDatabase } from './database/data-source';
 
 const app = express();
 

@@ -1,10 +1,14 @@
-import { and, count, desc, eq, gte, lte, or, isNull, sql } from 'drizzle-orm';
-import { getDb } from '../database/db';
-import { ads } from '../database/schema';
+import { AppDataSource } from '../database/data-source';
+import { Ad as AdEntity, AdStatus } from '../entities/Ad.entity';
 import { Ad, AdFilters, AdStats, PaginatedResponse } from '../models';
 import { DatabaseError } from '../errors/AppError';
+import { Repository } from 'typeorm';
 
-function toModel(row: typeof ads.$inferSelect): Ad {
+function getAdRepository(): Repository<AdEntity> {
+    return AppDataSource.getRepository(AdEntity);
+}
+
+function toModel(entity: AdEntity): Ad {
     const dateToString = (date: Date | string | null): string | null => {
         if (!date) return null;
         if (typeof date === 'string') return date.split('T')[0];
@@ -20,36 +24,19 @@ function toModel(row: typeof ads.$inferSelect): Ad {
     };
 
     return {
-        id: row.id,
-        ad_id: row.adId,
-        status: row.status as 'active' | 'inactive',
-        platforms: row.platforms,
-        start_date: dateToString(row.startDate),
-        end_date: dateToString(row.endDate),
-        asset_type: row.assetType as 'image' | 'video' | 'none',
-        asset_path: row.assetPath,
-        ad_content: row.adContent,
-        advertiser_name: row.advertiserName ?? 'Nike',
-        created_at: dateToISOString(row.createdAt),
-        updated_at: dateToISOString(row.updatedAt),
+        id: entity.id,
+        ad_id: entity.ad_id,
+        status: entity.status as 'active' | 'inactive',
+        platforms: entity.platforms,
+        start_date: dateToString(entity.start_date),
+        end_date: dateToString(entity.end_date),
+        asset_type: entity.asset_type as 'image' | 'video' | 'none',
+        asset_path: entity.asset_path,
+        ad_content: entity.ad_content,
+        advertiser_name: entity.advertiser_name,
+        created_at: dateToISOString(entity.created_at),
+        updated_at: dateToISOString(entity.updated_at),
     };
-}
-
-function buildWhereConditions(filters: AdFilters) {
-    const conditions = [];
-    if (filters.status) {
-        conditions.push(eq(ads.status, filters.status));
-    }
-    if (filters.platform) {
-        conditions.push(sql`${filters.platform} = ANY(${ads.platforms})`);
-    }
-    if (filters.startDate) {
-        conditions.push(gte(ads.startDate, filters.startDate));
-    }
-    if (filters.endDate) {
-        conditions.push(or(lte(ads.startDate, filters.endDate), isNull(ads.startDate))!);
-    }
-    return conditions.length > 0 ? and(...conditions) : undefined;
 }
 
 async function getAds(
@@ -58,130 +45,210 @@ async function getAds(
     pageSize: number = 20
 ): Promise<PaginatedResponse<Ad>> {
     try {
-        const db = getDb();
-        const whereClause = buildWhereConditions(filters);
+        const adRepository = getAdRepository();
+        const queryBuilder = adRepository.createQueryBuilder('ad');
 
-        const [{ value: total }] = await db
-            .select({ value: count() })
-            .from(ads)
-            .where(whereClause);
+            if (filters.status) {
+                queryBuilder.andWhere('ad.status = :status', { status: filters.status });
+            }
 
-        const offset = (page - 1) * pageSize;
-        const rows = await db
-            .select()
-            .from(ads)
-            .where(whereClause)
-            .orderBy(desc(ads.startDate), ads.id)
-            .limit(pageSize)
-            .offset(offset);
+            if (filters.platform) {
+                queryBuilder.andWhere(':platform = ANY(ad.platforms)', { platform: filters.platform });
+            }
 
-        const data = rows.map((row: typeof ads.$inferSelect) => toModel(row));
+            if (filters.startDate) {
+                queryBuilder.andWhere('ad.start_date >= :startDate', { 
+                    startDate: filters.startDate 
+                });
+            }
 
-        return {
-            data,
-            total: Number(total),
-            page,
-            pageSize,
-            totalPages: Math.ceil(Number(total) / pageSize),
-        };
-    } catch (error) {
-        throw new DatabaseError(
-            `Failed to fetch ads: ${error instanceof Error ? error.message : 'Unknown error'}`
-        );
-    }
+            if (filters.endDate) {
+                queryBuilder.andWhere(
+                    '(ad.start_date <= :endDate OR ad.start_date IS NULL)',
+                    { endDate: filters.endDate }
+                );
+            }
+
+            const total = await queryBuilder.getCount();
+
+            const offset = (page - 1) * pageSize;
+            const entities = await queryBuilder
+                .orderBy('ad.start_date', 'DESC', 'NULLS LAST')
+                .skip(offset)
+                .take(pageSize)
+                .getMany();
+
+            const data = entities.map(entity => toModel(entity));
+
+            return {
+                data,
+                total,
+                page,
+                pageSize,
+                totalPages: Math.ceil(total / pageSize),
+            };
+        } catch (error) {
+            throw new DatabaseError(`Failed to fetch ads: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
 }
 
 async function getAdById(id: number): Promise<Ad | null> {
     try {
-        const db = getDb();
-        const [row] = await db.select().from(ads).where(eq(ads.id, id)).limit(1);
-        return row ? toModel(row) : null;
+        const adRepository = getAdRepository();
+        const entity = await adRepository.findOne({ where: { id } });
+        return entity ? toModel(entity) : null;
     } catch (error) {
-        throw new DatabaseError(
-            `Failed to fetch ad: ${error instanceof Error ? error.message : 'Unknown error'}`
-        );
+        throw new DatabaseError(`Failed to fetch ad: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 }
 
 async function getStats(filters: AdFilters = {}): Promise<AdStats> {
     try {
-        const db = getDb();
-        const whereClause = buildWhereConditions(filters);
+        const adRepository = getAdRepository();
+        const queryBuilder = adRepository.createQueryBuilder('ad');
 
-        const [totalResult] = await db
-            .select({ value: count() })
-            .from(ads)
-            .where(whereClause);
-        const totalAds = Number(totalResult?.value ?? 0);
+            if (filters.startDate) {
+                queryBuilder.andWhere('ad.start_date >= :startDate', { 
+                    startDate: filters.startDate 
+                });
+            }
 
-        const [activeResult] = await db
-            .select({ value: count() })
-            .from(ads)
-            .where(and(whereClause, eq(ads.status, 'active')));
-        const activeAds = Number(activeResult?.value ?? 0);
+            if (filters.endDate) {
+                queryBuilder.andWhere(
+                    '(ad.start_date <= :endDate OR ad.start_date IS NULL)',
+                    { endDate: filters.endDate }
+                );
+            }
 
-        const [inactiveResult] = await db
-            .select({ value: count() })
-            .from(ads)
-            .where(and(whereClause, eq(ads.status, 'inactive')));
-        const inactiveAds = Number(inactiveResult?.value ?? 0);
+            if (filters.platform) {
+                queryBuilder.andWhere(':platform = ANY(ad.platforms)', { platform: filters.platform });
+            }
 
-        const timeData = await db
-            .select({
-                date: sql<string>`TO_CHAR(${ads.startDate}, 'YYYY-MM')`,
-                active: sql<string>`COUNT(*) FILTER (WHERE ${ads.status} = 'active')`,
-                inactive: sql<string>`COUNT(*) FILTER (WHERE ${ads.status} = 'inactive')`,
-                total: sql<string>`COUNT(*)`,
-            })
-            .from(ads)
-            .where(and(whereClause, sql`${ads.startDate} IS NOT NULL`))
-            .groupBy(sql`TO_CHAR(${ads.startDate}, 'YYYY-MM')`)
-            .orderBy(sql`TO_CHAR(${ads.startDate}, 'YYYY-MM')`);
+            const totalAds = await queryBuilder.getCount();
+            
+            const activeQuery = adRepository.createQueryBuilder('ad');
+            if (filters.startDate) {
+                activeQuery.andWhere('ad.start_date >= :startDate', { startDate: filters.startDate });
+            }
+            if (filters.endDate) {
+                activeQuery.andWhere('(ad.start_date <= :endDate OR ad.start_date IS NULL)', { endDate: filters.endDate });
+            }
+            if (filters.platform) {
+                activeQuery.andWhere(':platform = ANY(ad.platforms)', { platform: filters.platform });
+            }
+            const activeAds = await activeQuery
+                .andWhere('ad.status = :status', { status: AdStatus.ACTIVE })
+                .getCount();
 
-        const platformConditions: ReturnType<typeof sql>[] = [];
-        if (filters.startDate) {
-            platformConditions.push(sql`start_date >= ${filters.startDate}`);
-        }
-        if (filters.endDate) {
-            platformConditions.push(sql`start_date <= ${filters.endDate}`);
-        }
-        if (filters.platform) {
-            platformConditions.push(sql`${filters.platform} = ANY(platforms)`);
-        }
-        const platformWhere =
-            platformConditions.length > 0
-                ? sql`WHERE ${sql.join(platformConditions, sql` AND `)}`
-                : sql``;
+            const inactiveQuery = adRepository.createQueryBuilder('ad');
+            if (filters.startDate) {
+                inactiveQuery.andWhere('ad.start_date >= :startDate', { startDate: filters.startDate });
+            }
+            if (filters.endDate) {
+                inactiveQuery.andWhere('(ad.start_date <= :endDate OR ad.start_date IS NULL)', { endDate: filters.endDate });
+            }
+            if (filters.platform) {
+                inactiveQuery.andWhere(':platform = ANY(ad.platforms)', { platform: filters.platform });
+            }
+            const inactiveAds = await inactiveQuery
+                .andWhere('ad.status = :status', { status: AdStatus.INACTIVE })
+                .getCount();
 
-        const platformResult = await db.execute<{ platform: string; count: string }>(
-            sql`SELECT platform, COUNT(*)::text as count FROM ads, UNNEST(platforms) as platform ${platformWhere} GROUP BY platform ORDER BY count DESC`
-        );
-        const platformRows = 'rows' in platformResult ? platformResult.rows : [];
+            const timeQuery = adRepository
+                .createQueryBuilder('ad')
+                .select("TO_CHAR(ad.start_date, 'YYYY-MM')", 'date')
+                .addSelect("COUNT(*) FILTER (WHERE ad.status = 'active')", 'active')
+                .addSelect("COUNT(*) FILTER (WHERE ad.status = 'inactive')", 'inactive')
+                .addSelect('COUNT(*)', 'total')
+                .where('ad.start_date IS NOT NULL')
+                .groupBy("TO_CHAR(ad.start_date, 'YYYY-MM')")
+                .orderBy('date', 'ASC');
 
-        return {
-            totalAds,
-            activeAds,
-            inactiveAds,
-            adsOverTime: timeData.map(
-                (row: { date: string; active: string; inactive: string; total: string }) => ({
+            if (filters.startDate) {
+                timeQuery.andWhere('ad.start_date >= :startDate', { startDate: filters.startDate });
+            }
+
+            if (filters.endDate) {
+                timeQuery.andWhere('ad.start_date <= :endDate', { endDate: filters.endDate });
+            }
+
+            if (filters.platform) {
+                timeQuery.andWhere(':platform = ANY(ad.platforms)', { platform: filters.platform });
+            }
+
+            const timeData = await timeQuery.getRawMany();
+
+            const platformQuery = adRepository
+                .createQueryBuilder('ad')
+                .select('platform', 'platform')
+                .addSelect('COUNT(*)', 'count')
+                .from((subQuery) => {
+                    return subQuery
+                        .select('ad.id', 'id')
+                        .addSelect('UNNEST(ad.platforms)', 'platform')
+                        .from(AdEntity, 'ad');
+                }, 'platforms')
+                .groupBy('platform')
+                .orderBy('count', 'DESC');
+
+            const basePlatformQuery = adRepository.createQueryBuilder('ad');
+            if (filters.startDate) {
+                basePlatformQuery.andWhere('ad.start_date >= :startDate', { startDate: filters.startDate });
+            }
+            if (filters.endDate) {
+                basePlatformQuery.andWhere('ad.start_date <= :endDate', { endDate: filters.endDate });
+            }
+            if (filters.platform) {
+                basePlatformQuery.andWhere(':platform = ANY(ad.platforms)', { platform: filters.platform });
+            }
+
+            const platformParams: any[] = [];
+            let paramIndex = 1;
+            const platformConditions: string[] = [];
+            
+            if (filters.startDate) {
+                platformConditions.push(`start_date >= $${paramIndex++}`);
+                platformParams.push(filters.startDate);
+            }
+            if (filters.endDate) {
+                platformConditions.push(`start_date <= $${paramIndex++}`);
+                platformParams.push(filters.endDate);
+            }
+            if (filters.platform) {
+                platformConditions.push(`$${paramIndex++} = ANY(platforms)`);
+                platformParams.push(filters.platform);
+            }
+            
+            const platformWhere = platformConditions.length > 0 
+                ? `WHERE ${platformConditions.join(' AND ')}` 
+                : '';
+            
+            const platformDataRaw = await adRepository.query(`
+                SELECT platform, COUNT(*) as count
+                FROM ads, UNNEST(platforms) as platform
+                ${platformWhere}
+                GROUP BY platform
+                ORDER BY count DESC
+            `, platformParams);
+
+            return {
+                totalAds,
+                activeAds,
+                inactiveAds,
+                adsOverTime: timeData.map((row: any) => ({
                     date: row.date,
                     active: parseInt(row.active, 10),
                     inactive: parseInt(row.inactive, 10),
                     total: parseInt(row.total, 10),
-                })
-            ),
-            platformDistribution: (platformRows as { platform: string; count: string }[]).map(
-                (row) => ({
+                })),
+                platformDistribution: platformDataRaw.map((row: any) => ({
                     platform: row.platform,
                     count: parseInt(row.count, 10),
-                })
-            ),
-        };
-    } catch (error) {
-        throw new DatabaseError(
-            `Failed to fetch stats: ${error instanceof Error ? error.message : 'Unknown error'}`
-        );
-    }
+                })),
+            };
+        } catch (error) {
+            throw new DatabaseError(`Failed to fetch stats: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
 }
 
 export const adService = {
