@@ -1,0 +1,79 @@
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: ads-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ads_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ads-network
+
+  # Python Scraper Service
+  scraper:
+    build:
+      context: ./scraper
+      dockerfile: Dockerfile
+    container_name: ads-scraper
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/ads_db
+      ASSETS_DIR: /app/assets
+    volumes:
+      - ./assets:/app/assets
+    networks:
+      - ads-network
+
+  # Node.js Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ads-backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/ads_db
+      PORT: 3001
+      ASSETS_DIR: /app/assets
+    volumes:
+      - ./assets:/app/assets
+    ports:
+      - "3001:3001"
+    networks:
+      - ads-network
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ads-frontend
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    networks:
+      - ads-network
+
+volumes:
+  postgres_data:
+
+
+networks:
+  ads-network:
+    driver: bridge
